@@ -3,306 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dota Online — Вход по Логину</title>
+    <title>Dota Online — Realtime Auth</title>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
     <style>
-        :root {
-            --dota-red: #a32222;
-            --dota-gold: #c3a067;
-            --dota-bg: #0b0e11;
-            --dota-panel: #1c2024;
-            --dota-border: #3d444b;
-            --online: #00ff00;
-        }
-
-        body {
-            background: #000 url('https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/backgrounds/grey_texture.png');
-            color: #e1e1e1; font-family: 'Inter', sans-serif; height: 100vh; margin: 0; overflow: hidden;
-        }
-
+        :root { --dota-red: #a32222; --dota-gold: #c3a067; --dota-panel: #1c2024; --dota-border: #3d444b; }
+        body { background: #000 url('https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/backgrounds/grey_texture.png'); color: #e1e1e1; font-family: 'Inter', sans-serif; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
         .hidden { display: none !important; }
-        .dota-font { font-family: 'Cinzel', serif; }
-
-        /* --- Auth Card --- */
-        .auth-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.9);
-            display: flex; justify-content: center; align-items: center; z-index: 1000;
-        }
-
-        .dota-card {
-            background: var(--dota-panel); border: 1px solid var(--dota-border);
-            padding: 30px; width: 350px; box-shadow: 0 0 30px rgba(0,0,0,0.5);
-        }
-
-        .dota-card h2 { text-align: center; margin-bottom: 20px; color: var(--dota-gold); }
-
-        input {
-            width: 100%; padding: 12px; background: #000; border: 1px solid var(--dota-border);
-            color: white; margin-bottom: 12px; outline: none; box-sizing: border-box;
-            transition: 0.3s;
-        }
+        .dota-card { background: var(--dota-panel); border: 1px solid var(--dota-border); padding: 30px; width: 350px; box-shadow: 0 0 30px rgba(0,0,0,0.5); text-align: center; }
+        input { width: 100%; padding: 12px; background: #000; border: 1px solid var(--dota-border); color: white; margin-bottom: 12px; box-sizing: border-box; outline: none; }
         input:focus { border-color: var(--dota-gold); }
-
-        .btn-dota {
-            background: linear-gradient(to bottom, #4d555d, #2b3136);
-            border: 1px solid #6c757d; color: white; padding: 12px;
-            cursor: pointer; width: 100%; font-weight: bold; text-transform: uppercase;
-        }
-        .btn-dota:hover { border-color: var(--dota-gold); background: #3d444b; }
-
-        /* --- UI Elements --- */
-        .navbar {
-            height: 70px; background: rgba(0,0,0,0.8); border-bottom: 1px solid var(--dota-border);
-            display: flex; justify-content: space-between; align-items: center; padding: 0 30px;
-        }
-        .profile-trigger { display: flex; align-items: center; gap: 15px; cursor: pointer; }
-        .avatar-frame { width: 45px; height: 45px; border: 1px solid var(--dota-gold); position: relative; }
+        .btn-dota { background: linear-gradient(to bottom, #4d555d, #2b3136); border: 1px solid #6c757d; color: white; padding: 12px; cursor: pointer; width: 100%; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; }
+        .btn-dota:hover { border-color: var(--dota-gold); }
+        .navbar { position: fixed; top: 0; width: 100%; height: 70px; background: rgba(0,0,0,0.8); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; box-sizing: border-box; border-bottom: 1px solid var(--dota-border); }
+        .avatar-frame { width: 40px; height: 40px; border: 1px solid var(--dota-gold); overflow: hidden; }
         .avatar-frame img { width: 100%; height: 100%; object-fit: cover; }
-
-        .main-container { padding: 30px; display: grid; grid-template-columns: 320px 1fr; gap: 30px; }
-        .friends-panel { background: rgba(20,24,28,0.8); border: 1px solid var(--dota-border); padding: 20px; height: 70vh; overflow-y: auto; }
-        
-        .friend-item {
-            display: flex; align-items: center; gap: 10px; padding: 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;
-        }
-        .friend-item:hover { background: rgba(255,255,255,0.05); }
-
-        .play-box { position: fixed; bottom: 30px; right: 30px; }
-        .play-btn {
-            background: linear-gradient(135deg, #448a2e, #214d14);
-            color: white; padding: 15px 50px; font-size: 24px; border: 1px solid #6fb853;
-            cursor: pointer; clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
-        }
-
-        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 500; }
     </style>
 </head>
 <body>
 
-    <!-- ЭКРАН ВХОДА И РЕГИСТРАЦИИ -->
-    <div id="auth-screen" class="auth-overlay">
+    <!-- ЭКРАН ВХОДА -->
+    <div id="auth-screen">
         <div class="dota-card">
-            <h2 id="auth-title" class="dota-font">Вход</h2>
-            
-            <input type="text" id="auth-login" placeholder="Логин">
-            <input type="password" id="auth-password" placeholder="Пароль">
-            
-            <!-- Поле подтверждения пароля (только для регистрации) -->
-            <div id="confirm-box" class="hidden">
-                <input type="password" id="auth-confirm" placeholder="Повторите пароль">
+            <h2 id="auth-title" style="font-family: 'Cinzel'; color: var(--dota-gold);">Вход</h2>
+            <input type="text" id="login" placeholder="Логин">
+            <input type="password" id="pass" placeholder="Пароль">
+            <div id="reg-box" class="hidden">
+                <input type="password" id="pass_confirm" placeholder="Повторите пароль">
             </div>
-
-            <button class="btn-dota" onclick="handleAuth()" id="auth-btn">Войти</button>
-            
-            <p id="toggle-text" onclick="toggleReg()" style="font-size: 11px; margin-top: 15px; cursor:pointer; color: var(--dota-gold); text-align: center;">
-                НЕТ АККАУНТА? СОЗДАТЬ
-            </p>
+            <button class="btn-dota" id="main-btn" onclick="handleAuth()">Войти</button>
+            <p id="toggle-link" style="font-size: 11px; cursor: pointer; color: var(--dota-gold);" onclick="toggleMode()">НЕТ АККАУНТА? СОЗДАТЬ</p>
         </div>
     </div>
 
     <!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
     <div id="app" class="hidden">
         <nav class="navbar">
-            <div class="profile-trigger" onclick="openProfile(currentUser.id, true)">
-                <div class="avatar-frame"><img src="" id="nav-avatar"></div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div class="avatar-frame"><img id="user-avatar" src=""></div>
                 <div>
-                    <div id="nav-login" class="dota-font" style="color: var(--dota-gold);">LOGIN</div>
-                    <div id="nav-id" style="font-size: 10px; color: #888;">ID: 000000</div>
+                    <div id="user-login" style="font-family: 'Cinzel'; color: var(--dota-gold);">NAME</div>
+                    <div id="user-id" style="font-size: 10px; color: #888;">ID: 000000</div>
                 </div>
             </div>
-            <div style="display: flex; gap: 10px;">
-                <button onclick="showNotifications()" class="btn-dota" style="width: auto; padding: 5px 15px;">
-                    <i class="fas fa-bell"></i> <span id="notif-count">0</span>
-                </button>
-                <button onclick="logout()" class="btn-dota" style="width: auto; padding: 5px 15px; background: #333;">Выход</button>
-            </div>
+            <button class="btn-dota" style="width: auto; padding: 5px 20px;" onclick="logout()">Выйти</button>
         </nav>
-
-        <div class="main-container">
-            <div class="friends-panel">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
-                    <span class="dota-font">ДРУЗЬЯ</span>
-                    <i class="fas fa-user-plus" style="cursor:pointer; color: var(--dota-gold);" onclick="showAddFriend()"></i>
-                </div>
-                <div id="friends-list"></div>
-            </div>
-        </div>
-
-        <div class="play-box">
-            <button class="play-btn dota-font">ИГРАТЬ</button>
-        </div>
-    </div>
-
-    <!-- Модалки (профиль, уведомления) -->
-    <div id="profile-modal" class="modal hidden">
-        <div class="dota-card" style="width: 400px; text-align: center;">
-            <div class="avatar-frame" style="width: 80px; height: 80px; margin: 0 auto;" onclick="showAvatarGrid()">
-                <img src="" id="prof-avatar">
-            </div>
-            <h3 id="prof-login" class="dota-font"></h3>
-            <textarea id="prof-desc" placeholder="О себе..."></textarea>
-            <button class="btn-dota" onclick="saveDescription()">Сохранить</button>
-            <button class="btn-dota" style="margin-top:5px; background:#222;" onclick="closeModals()">Закрыть</button>
-        </div>
-    </div>
-
-    <div id="notif-modal" class="modal hidden">
-        <div class="dota-card">
-            <h3 class="dota-font">Уведомления</h3>
-            <div id="notif-list"></div>
-            <button class="btn-dota" onclick="closeModals()">Закрыть</button>
+        <div style="text-align: center;">
+            <h1 style="font-family: 'Cinzel'; font-size: 40px; opacity: 0.5;">СЕТЬ ПОДКЛЮЧЕНА</h1>
+            <p>Вы вошли как <span id="display-name"></span></p>
         </div>
     </div>
 
     <script>
-        // КОНФИГУРАЦИЯ SUPABASE
-        const SB_URL = "ВАШ_SUPABASE_URL";
-        const SB_KEY = "ВАШ_SUPABASE_ANON_KEY";
+        // ДАННЫЕ SUPABASE (ВСТАВЬ СВОИ)
+        const SB_URL = "ВАШ_URL";
+        const SB_KEY = "ВАШ_KEY";
         const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
-        let currentUser = null;
-        let isReg = false;
+        let isRegistration = false;
 
-        // Переключение Вход / Регистрация
-        function toggleReg() {
-            isReg = !isReg;
-            document.getElementById('auth-title').innerText = isReg ? 'Регистрация' : 'Вход';
-            document.getElementById('auth-btn').innerText = isReg ? 'Создать аккаунт' : 'Войти';
-            document.getElementById('confirm-box').classList.toggle('hidden', !isReg);
-            document.getElementById('toggle-text').innerText = isReg ? 'УЖЕ ЕСТЬ АККАУНТ? ВОЙТИ' : 'НЕТ АККАУНТА? СОЗДАТЬ';
+        function toggleMode() {
+            isRegistration = !isRegistration;
+            document.getElementById('auth-title').innerText = isRegistration ? 'Регистрация' : 'Вход';
+            document.getElementById('main-btn').innerText = isRegistration ? 'Создать' : 'Войти';
+            document.getElementById('reg-box').classList.toggle('hidden', !isRegistration);
+            document.getElementById('toggle-link').innerText = isRegistration ? 'ЕСТЬ АККАУНТ? ВОЙТИ' : 'НЕТ АККАУНТА? СОЗДАТЬ';
         }
 
-        // Обработка Входа и Регистрации
         async function handleAuth() {
-            const login = document.getElementById('auth-login').value.trim();
-            const pass = document.getElementById('auth-password').value;
-            const confirmPass = document.getElementById('auth-confirm').value;
+            const login = document.getElementById('login').value.trim();
+            const pass = document.getElementById('pass').value;
+            const confirm = document.getElementById('pass_confirm').value;
 
-            if (login.length < 3) return alert("Логин слишком короткий");
-            if (pass.length < 6) return alert("Пароль должен быть от 6 символов");
+            if (!login || !pass) return alert("Заполните поля!");
 
-            // Создаем виртуальный email из логина
-            const virtualEmail = `${login}@dota.local`;
+            // Используем виртуальную почту для Supabase Auth
+            const email = `${login}@dota.app`;
 
-            if (isReg) {
-                // РЕГИСТРАЦИЯ
-                if (pass !== confirmPass) return alert("Пароли не совпадают!");
+            if (isRegistration) {
+                if (pass !== confirm) return alert("Пароли не совпадают!");
+                
+                // 1. Регистрация в Auth
+                const { data, error } = await supabase.auth.signUp({ email, password: pass });
+                
+                if (error) {
+                    alert("Ошибка регистрации: " + error.message);
+                    return;
+                }
 
-                const { data, error } = await supabase.auth.signUp({
-                    email: virtualEmail,
-                    password: pass
-                });
-
-                if (error) return alert("Ошибка: " + error.message);
-
-                // Создаем профиль в таблице profiles
+                // 2. Создание записи в таблице profiles
                 const displayId = Math.floor(100000 + Math.random() * 899999);
-                const { error: pError } = await supabase.from('profiles').insert([
+                const { error: profileError } = await supabase.from('profiles').insert([
                     { 
                         id: data.user.id, 
                         login: login, 
-                        display_id: displayId, 
-                        avatar_url: "https://avatars.mds.yandex.net/i?id=9daa48affce7cf03b7b75863f56075a279504a68-10254792-images-thumbs&n=13" 
+                        display_id: displayId,
+                        avatar_url: "https://avatars.mds.yandex.net/i?id=9daa48affce7cf03b7b75863f56075a279504a68-10254792-images-thumbs&n=13"
                     }
                 ]);
 
-                if (pError) console.error(pError);
-                alert("Аккаунт создан! Теперь войдите.");
-                toggleReg();
+                if (profileError) {
+                    console.error("Profile error:", profileError);
+                    alert("Аккаунт создан, но профиль не заполнился.");
+                } else {
+                    alert("Аккаунт успешно создан! Теперь войдите.");
+                    toggleMode();
+                }
+
             } else {
                 // ВХОД
-                const { data, error } = await supabase.auth.signInWithPassword({
-                    email: virtualEmail,
-                    password: pass
-                });
-
-                if (error) return alert("Неверный логин или пароль");
-                initApp();
+                const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+                
+                if (error) {
+                    alert("Ошибка входа: " + error.message);
+                } else {
+                    checkUser();
+                }
             }
         }
 
-        async function initApp() {
+        async function checkUser() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-                currentUser = profile;
-                
-                document.getElementById('auth-screen').classList.add('hidden');
-                document.getElementById('app').classList.remove('hidden');
-                
-                updateUI();
-                refreshData();
-                startHeartbeat();
-                setupRealtime();
+                if (profile) {
+                    showApp(profile);
+                }
             }
         }
 
-        function updateUI() {
-            document.getElementById('nav-avatar').src = currentUser.avatar_url;
-            document.getElementById('nav-login').innerText = currentUser.login.toUpperCase();
-            document.getElementById('nav-id').innerText = "ID: " + currentUser.display_id;
+        function showApp(profile) {
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+            document.getElementById('user-login').innerText = profile.login.toUpperCase();
+            document.getElementById('display-name').innerText = profile.login;
+            document.getElementById('user-id').innerText = "ID: " + profile.display_id;
+            document.getElementById('user-avatar').src = profile.avatar_url;
         }
 
-        async function refreshData() {
-            // Загрузка друзей
-            const { data: f1 } = await supabase.from('friendships').select('receiver_id, profiles!friendships_receiver_id_fkey(*)').eq('sender_id', currentUser.id).eq('status', 'accepted');
-            const { data: f2 } = await supabase.from('friendships').select('sender_id, profiles!friendships_sender_id_fkey(*)').eq('receiver_id', currentUser.id).eq('status', 'accepted');
-            
-            const list = document.getElementById('friends-list');
-            list.innerHTML = '';
-            const allFriends = [...(f1?.map(x=>x.profiles) || []), ...(f2?.map(x=>x.profiles) || [])];
-            
-            allFriends.forEach(f => {
-                const isOnline = (new Date() - new Date(f.last_seen)) < 60000;
-                list.innerHTML += `
-                    <div class="friend-item" onclick="openProfile('${f.id}')">
-                        <div class="avatar-frame" style="width:30px; height:30px; border-color:${isOnline ? 'var(--online)' : '#555'}">
-                            <img src="${f.avatar_url}">
-                        </div>
-                        <span style="color:${isOnline ? '#fff' : '#888'}">${f.login}</span>
-                    </div>
-                `;
-            });
-
-            // Заявки
-            const { data: reqs } = await supabase.from('friendships').select('id, profiles!friendships_sender_id_fkey(*)').eq('receiver_id', currentUser.id).eq('status', 'pending');
-            document.getElementById('notif-count').innerText = reqs?.length || 0;
-            window.pendingRequests = reqs || [];
+        async function logout() {
+            await supabase.auth.signOut();
+            location.reload();
         }
 
-        function setupRealtime() {
-            supabase.channel('global').on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => refreshData()).subscribe();
-        }
-
-        function startHeartbeat() {
-            setInterval(() => {
-                supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', currentUser.id).then();
-            }, 30000);
-        }
-
-        async function showAddFriend() {
-            const id = prompt("Введите ID игрока:");
-            if (!id) return;
-            const { data: target } = await supabase.from('profiles').select('id').eq('display_id', id).single();
-            if (target) {
-                await supabase.from('friendships').insert([{ sender_id: currentUser.id, receiver_id: target.id }]);
-                alert("Заявка отправлена!");
-            } else alert("Игрок не найден");
-        }
-
-        function logout() {
-            supabase.auth.signOut().then(() => location.reload());
-        }
-
-        function closeModals() { document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden')); }
-
-        // Проверка сессии при загрузке
+        // Проверяем сессию при загрузке страницы
         supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) initApp();
+            if (session) checkUser();
         });
     </script>
 </body>
