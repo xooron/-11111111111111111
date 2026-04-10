@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dota Online Dashboard — Realtime</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        :root {
+            --dota-red: #a32222;
+            --dota-gold: #c3a067;
+            --dota-bg: #0b0e11;
+            --dota-panel: #1c2024;
+            --dota-border: #3d444b;
+            --transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+            --online: #00ff00;
+            --offline: #555;
+        }
+
+        body {
+            background: #000 url('https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/backgrounds/grey_texture.png');
+            color: #e1e1e1;
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .hidden { display: none !important; }
+        .dota-font { font-family: 'Cinzel', serif; }
+
+        /* --- Auth --- */
+        .auth-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+            display: flex; justify-content: center; align-items: center; z-index: 1000;
+        }
+
+        .dota-card {
+            background: var(--dota-panel);
+            border: 1px solid var(--dota-border);
+            padding: 30px;
+            width: 350px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        }
+
+        input, textarea {
+            width: 100%; padding: 10px; background: #000; border: 1px solid var(--dota-border);
+            color: white; margin-bottom: 10px; outline: none; box-sizing: border-box;
+        }
+
+        .btn-dota {
+            background: linear-gradient(to bottom, #4d555d, #2b3136);
+            border: 1px solid #6c757d; color: white; padding: 10px;
+            cursor: pointer; width: 100%; font-weight: bold; text-transform: uppercase;
+        }
+        .btn-dota:hover { border-color: var(--dota-gold); }
+
+        /* --- Header --- */
+        .navbar {
+            height: 70px; background: rgba(0,0,0,0.8); border-bottom: 1px solid var(--dota-border);
+            display: flex; justify-content: space-between; align-items: center; padding: 0 30px;
+        }
+
+        .profile-trigger { display: flex; align-items: center; gap: 15px; cursor: pointer; }
+        .avatar-frame { 
+            width: 45px; height: 45px; border: 1px solid var(--dota-gold); position: relative;
+            background: #222;
+        }
+        .avatar-frame img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* --- Friends Area --- */
+        .main-container { padding: 30px; display: grid; grid-template-columns: 320px 1fr; gap: 30px; height: calc(100vh - 150px); }
+        .friends-panel { background: rgba(20,24,28,0.8); border: 1px solid var(--dota-border); padding: 20px; overflow-y: auto; }
+        
+        .friend-item {
+            display: flex; align-items: center; gap: 12px; padding: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;
+            transition: 0.2s;
+        }
+        .friend-item:hover { background: rgba(255,255,255,0.05); }
+
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%; position: absolute; bottom: -2px; right: -2px;
+            border: 2px solid var(--dota-panel);
+        }
+
+        /* --- Play Button --- */
+        .play-box { position: fixed; bottom: 30px; right: 30px; text-align: right; }
+        .play-btn {
+            background: linear-gradient(135deg, #448a2e, #214d14);
+            color: white; padding: 15px 50px; font-size: 24px; border: 1px solid #6fb853;
+            cursor: pointer; clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
+        }
+
+        /* --- Modals --- */
+        .modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+            display: flex; justify-content: center; align-items: center; z-index: 500;
+        }
+
+        .notif-badge {
+            background: var(--dota-red); color: white; border-radius: 50%; 
+            padding: 2px 6px; font-size: 10px; margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Экран входа -->
+    <div id="auth-screen" class="auth-overlay">
+        <div class="dota-card">
+            <h2 id="auth-title" class="dota-font">Войти в сеть</h2>
+            <input type="email" id="email" placeholder="Email (например test@test.com)">
+            <input type="password" id="password" placeholder="Пароль">
+            <div id="reg-fields" class="hidden">
+                <input type="text" id="username" placeholder="Придумайте логин">
+            </div>
+            <button class="btn-dota" onclick="handleAuth()" id="auth-btn">Войти</button>
+            <p onclick="toggleReg()" style="font-size: 11px; margin-top: 15px; cursor:pointer; color: var(--dota-gold); text-align: center;">СОЗДАТЬ АККАУНТ</p>
+        </div>
+    </div>
+
+    <!-- Основной интерфейс -->
+    <div id="app" class="hidden">
+        <nav class="navbar">
+            <div class="profile-trigger" onclick="openProfile(currentUser.id, true)">
+                <div class="avatar-frame">
+                    <img src="" id="nav-avatar">
+                </div>
+                <div>
+                    <div id="nav-login" class="dota-font" style="color: var(--dota-gold);">LOGIN</div>
+                    <div id="nav-id" style="font-size: 10px; color: #888;">ID: 0000</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <button onclick="showNotifications()" class="btn-dota" style="width: auto; padding: 5px 15px;">
+                    <i class="fas fa-bell"></i> <span id="notif-count" class="notif-badge">0</span>
+                </button>
+                <button onclick="logout()" class="btn-dota" style="width: auto; padding: 5px 15px; background: #333;">Выход</button>
+            </div>
+        </nav>
+
+        <div class="main-container">
+            <div class="friends-panel">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <span class="dota-font">ДРУЗЬЯ</span>
+                    <i class="fas fa-user-plus" style="cursor:pointer; color: var(--dota-gold);" onclick="showAddFriend()"></i>
+                </div>
+                <div id="friends-list">
+                    <!-- Друзья подгрузятся сюда -->
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: center; align-items: center; opacity: 0.3;">
+                <img src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/logos/dota_footer_logo.png" style="width: 200px;">
+            </div>
+        </div>
+
+        <div class="play-box">
+            <div id="play-menu" class="dota-card hidden" style="margin-bottom: 10px;">
+                <div onclick="alert('Поиск ботов...')" style="padding: 10px; cursor: pointer;">Играть с ботами</div>
+                <div onclick="alert('Поиск онлайн...')" style="padding: 10px; cursor: pointer;">Играть онлайн</div>
+            </div>
+            <button class="play-btn dota-font" onclick="document.getElementById('play-menu').classList.toggle('hidden')">ИГРАТЬ</button>
+        </div>
+    </div>
+
+    <!-- Модалка профиля -->
+    <div id="profile-modal" class="modal hidden">
+        <div class="dota-card" style="width: 450px; text-align: center;">
+            <div class="avatar-frame" style="width: 100px; height: 100px; margin: 0 auto; cursor: pointer;" id="prof-avatar-box" onclick="showAvatarGrid()">
+                <img src="" id="prof-avatar">
+            </div>
+            <h2 id="prof-login" class="dota-font" style="margin-top: 15px;">Login</h2>
+            <p id="prof-id-val" style="color: var(--dota-red);">ID: 0000</p>
+            <textarea id="prof-desc" placeholder="Описание профиля..."></textarea>
+            <button class="btn-dota" id="save-prof-btn" onclick="saveDescription()">Сохранить</button>
+            <button class="btn-dota" style="margin-top: 5px; background: #333;" onclick="closeModals()">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Модалка уведомлений -->
+    <div id="notif-modal" class="modal hidden">
+        <div class="dota-card">
+            <h3 class="dota-font">Заявки в друзья</h3>
+            <div id="notif-list" style="margin: 15px 0; max-height: 200px; overflow-y: auto;"></div>
+            <button class="btn-dota" onclick="closeModals()">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Выбор аватара -->
+    <div id="avatar-modal" class="modal hidden">
+        <div class="dota-card" style="width: 400px;">
+            <h3 class="dota-font">Выберите героя</h3>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;" id="avatar-grid"></div>
+            <button class="btn-dota" style="margin-top: 15px;" onclick="document.getElementById('avatar-modal').classList.add('hidden')">Назад</button>
+        </div>
+    </div>
+
+    <script>
+        // --- КОНФИГУРАЦИЯ SUPABASE ---
+        const SB_URL = "https://zivcqnkymulfttkmutvl.supabase.co";
+        const SB_KEY = "sb_publishable_Kj9WyV_jURDeGNQLAY_r7A_sWAkOOhk";
+        const supabase = window.supabase.createClient(SB_URL, SB_KEY);
+
+        let currentUser = null;
+        let isReg = false;
+
+        const avatarLinks = [
+            "https://avatars.mds.yandex.net/i?id=9daa48affce7cf03b7b75863f56075a279504a68-10254792-images-thumbs&n=13",
+            "https://avatars.mds.yandex.net/i?id=4547ad8f66ef0b74068cf20b36579ec68e549808-5233353-images-thumbs&n=13",
+            "https://avatars.mds.yandex.net/i?id=61ca3bb2205e6b9a2be4b5ba8317283694230784-5876357-images-thumbs&n=13",
+            "https://avatars.mds.yandex.net/i?id=1fcf6c51429e992789f4f18d1aab178f32fa4dbd-5235819-images-thumbs&n=13",
+            "https://avatars.mds.yandex.net/i?id=a4809f5288505f436720f0aecfdbedce6b698fd6-5904614-images-thumbs&n=13",
+            "https://avatars.mds.yandex.net/i?id=ef0c2af5d25bc6d25977eed7376ccbbde67462b9-8289735-images-thumbs&n=13",
+            "https://avatars.mds.yandex.net/i?id=a7bc53dfd74922f7bec5379350f3e602f80ab259-13592131-images-thumbs&n=13",
+            "https://media.discordapp.net/attachments/837716217329352745/1491746449418096710/IMG_0181.jpg?ex=69d8d0a4&is=69d77f24&hm=98c2c266587d27f07603ac83770c7d992058249e31e73ad4f1801a765f9aef9a"
+        ];
+
+        function toggleReg() {
+            isReg = !isReg;
+            document.getElementById('auth-title').innerText = isReg ? 'Создать аккаунт' : 'Войти';
+            document.getElementById('reg-fields').classList.toggle('hidden', !isReg);
+            document.getElementById('auth-btn').innerText = isReg ? 'Зарегистрироваться' : 'Войти';
+        }
+
+        async function handleAuth() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const login = document.getElementById('username').value;
+
+            if (isReg) {
+                const { data, error } = await supabase.auth.signUp({ email, password });
+                if (error) return alert(error.message);
+                
+                const displayId = Math.floor(100000 + Math.random() * 899999);
+                await supabase.from('profiles').insert([
+                    { id: data.user.id, login: login, display_id: displayId, avatar_url: avatarLinks[0] }
+                ]);
+                alert("Успешно! Теперь войдите.");
+                toggleReg();
+            } else {
+                const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                if (error) return alert(error.message);
+                initApp();
+            }
+        }
+
+        async function initApp() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+                currentUser = profile;
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('app').classList.remove('hidden');
+                
+                updateUI();
+                refreshData();
+                setupRealtime();
+                startHeartbeat();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('nav-avatar').src = currentUser.avatar_url;
+            document.getElementById('nav-login').innerText = currentUser.login.toUpperCase();
+            document.getElementById('nav-id').innerText = "ID: " + currentUser.display_id;
+        }
+
+        async function refreshData() {
+            // Загрузка друзей (взаимных)
+            const { data: f1 } = await supabase.from('friendships')
+                .select('receiver_id, profiles!friendships_receiver_id_fkey(*)')
+                .eq('sender_id', currentUser.id).eq('status', 'accepted');
+            const { data: f2 } = await supabase.from('friendships')
+                .select('sender_id, profiles!friendships_sender_id_fkey(*)')
+                .eq('receiver_id', currentUser.id).eq('status', 'accepted');
+            
+            const list = document.getElementById('friends-list');
+            list.innerHTML = '';
+            
+            const friends = [...(f1?.map(x=>x.profiles) || []), ...(f2?.map(x=>x.profiles) || [])];
+            
+            friends.forEach(profile => {
+                const isOnline = (new Date() - new Date(profile.last_seen)) < 60000;
+                const div = document.createElement('div');
+                div.className = 'friend-item';
+                div.innerHTML = `
+                    <div class="avatar-frame" style="width:35px; height:35px; border-color:${isOnline ? 'var(--online)' : '#555'}">
+                        <img src="${profile.avatar_url}">
+                        <div class="status-dot" style="background:${isOnline ? 'var(--online)' : '#555'}"></div>
+                    </div>
+                    <div>
+                        <div style="font-size:13px; color:${isOnline ? '#fff' : '#888'}">${profile.login}</div>
+                        <div style="font-size:9px; color:${isOnline ? 'var(--online)' : '#555'}">${isOnline ? 'В СЕТИ' : 'НЕ В СЕТИ'}</div>
+                    </div>
+                `;
+                div.onclick = () => openProfile(profile.id, false);
+                list.appendChild(div);
+            });
+
+            // Заявки
+            const { data: reqs } = await supabase.from('friendships')
+                .select('id, sender_id, profiles!friendships_sender_id_fkey(*)')
+                .eq('receiver_id', currentUser.id).eq('status', 'pending');
+            
+            document.getElementById('notif-count').innerText = reqs ? reqs.length : 0;
+            window.pendingRequests = reqs || [];
+        }
+
+        function setupRealtime() {
+            supabase.channel('room1')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => refreshData())
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => refreshData())
+            .subscribe();
+        }
+
+        function startHeartbeat() {
+            const updateStatus = async () => {
+                await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', currentUser.id);
+            };
+            updateStatus();
+            setInterval(updateStatus, 30000);
+        }
+
+        async function showAddFriend() {
+            const targetId = prompt("Введите ID игрока (6 цифр):");
+            if (!targetId) return;
+            
+            const { data: target } = await supabase.from('profiles').select('id').eq('display_id', targetId).single();
+            if (!target) return alert("Игрок не найден");
+            if (target.id === currentUser.id) return alert("Это вы :)");
+
+            const { error } = await supabase.from('friendships').insert([{ sender_id: currentUser.id, receiver_id: target.id }]);
+            if (error) alert("Заявка уже отправлена");
+            else alert("Заявка отправлена!");
+        }
+
+        function showNotifications() {
+            const list = document.getElementById('notif-list');
+            list.innerHTML = '';
+            if (window.pendingRequests.length === 0) {
+                list.innerHTML = "Нет новых заявок";
+            } else {
+                window.pendingRequests.forEach(r => {
+                    const div = document.createElement('div');
+                    div.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#000; padding:10px; border:1px solid #333";
+                    div.innerHTML = `
+                        <span>${r.profiles.login}</span>
+                        <button onclick="acceptFriend('${r.id}')" style="background:#448a2e; color:white; border:none; padding:5px 10px; cursor:pointer;">Принять</button>
+                    `;
+                    list.appendChild(div);
+                });
+            }
+            document.getElementById('notif-modal').classList.remove('hidden');
+        }
+
+        async function acceptFriend(reqId) {
+            await supabase.from('friendships').update({ status: 'accepted' }).eq('id', reqId);
+            closeModals();
+            refreshData();
+        }
+
+        async function openProfile(userId, isMy = false) {
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
+            document.getElementById('prof-avatar').src = profile.avatar_url;
+            document.getElementById('prof-login').innerText = profile.login;
+            document.getElementById('prof-id-val').innerText = "ID: " + profile.display_id;
+            document.getElementById('prof-desc').value = profile.description || "";
+            
+            const saveBtn = document.getElementById('save-prof-btn');
+            const avatarBox = document.getElementById('prof-avatar-box');
+            
+            if (isMy) {
+                saveBtn.classList.remove('hidden');
+                avatarBox.style.cursor = 'pointer';
+                document.getElementById('prof-desc').disabled = false;
+            } else {
+                saveBtn.classList.add('hidden');
+                avatarBox.style.cursor = 'default';
+                document.getElementById('prof-desc').disabled = true;
+            }
+            
+            document.getElementById('profile-modal').classList.remove('hidden');
+        }
+
+        async function saveDescription() {
+            const desc = document.getElementById('prof-desc').value;
+            await supabase.from('profiles').update({ description: desc }).eq('id', currentUser.id);
+            alert("Сохранено");
+        }
+
+        function showAvatarGrid() {
+            if (document.getElementById('save-prof-btn').classList.contains('hidden')) return;
+            const grid = document.getElementById('avatar-grid');
+            grid.innerHTML = '';
+            avatarLinks.forEach(url => {
+                const img = document.createElement('img');
+                img.src = url;
+                img.style.cssText = 'width:100%; cursor:pointer; border:1px solid #333; transition:0.2s';
+                img.onclick = async () => {
+                    await supabase.from('profiles').update({ avatar_url: url }).eq('id', currentUser.id);
+                    currentUser.avatar_url = url;
+                    updateUI();
+                    document.getElementById('prof-avatar').src = url;
+                    document.getElementById('avatar-modal').classList.add('hidden');
+                };
+                grid.appendChild(img);
+            });
+            document.getElementById('avatar-modal').classList.remove('hidden');
+        }
+
+        function closeModals() {
+            document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+        }
+
+        async function logout() {
+            await supabase.auth.signOut();
+            location.reload();
+        }
+
+        // Авто-логин
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) initApp();
+        });
+    </script>
+</body>
+</html>
