@@ -3,153 +3,318 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dota Online — Realtime Auth</title>
+    <title>Dota Online Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <style>
-        :root { --dota-red: #a32222; --dota-gold: #c3a067; --dota-panel: #1c2024; --dota-border: #3d444b; }
-        body { background: #000 url('https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/backgrounds/grey_texture.png'); color: #e1e1e1; font-family: 'Inter', sans-serif; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        :root {
+            --dota-red: #a32222; --dota-gold: #c3a067; --dota-panel: #1c2024; --dota-border: #3d444b;
+            --online: #00ff00; --offline: #555;
+        }
+
+        body {
+            background: #000 url('https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/backgrounds/grey_texture.png');
+            color: #e1e1e1; font-family: 'Inter', sans-serif; height: 100vh; margin: 0; overflow: hidden;
+        }
+
         .hidden { display: none !important; }
-        .dota-card { background: var(--dota-panel); border: 1px solid var(--dota-border); padding: 30px; width: 350px; box-shadow: 0 0 30px rgba(0,0,0,0.5); text-align: center; }
-        input { width: 100%; padding: 12px; background: #000; border: 1px solid var(--dota-border); color: white; margin-bottom: 12px; box-sizing: border-box; outline: none; }
-        input:focus { border-color: var(--dota-gold); }
-        .btn-dota { background: linear-gradient(to bottom, #4d555d, #2b3136); border: 1px solid #6c757d; color: white; padding: 12px; cursor: pointer; width: 100%; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; }
+        .dota-font { font-family: 'Cinzel', serif; }
+
+        /* --- Auth --- */
+        .auth-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.95);
+            display: flex; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .dota-card {
+            background: var(--dota-panel); border: 1px solid var(--dota-border);
+            padding: 30px; width: 350px; box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        }
+        input, textarea {
+            width: 100%; padding: 12px; background: #000; border: 1px solid var(--dota-border);
+            color: white; margin-bottom: 12px; outline: none; box-sizing: border-box;
+        }
+        .btn-dota {
+            background: linear-gradient(to bottom, #4d555d, #2b3136);
+            border: 1px solid #6c757d; color: white; padding: 12px;
+            cursor: pointer; width: 100%; font-weight: bold; text-transform: uppercase;
+        }
         .btn-dota:hover { border-color: var(--dota-gold); }
-        .navbar { position: fixed; top: 0; width: 100%; height: 70px; background: rgba(0,0,0,0.8); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; box-sizing: border-box; border-bottom: 1px solid var(--dota-border); }
-        .avatar-frame { width: 40px; height: 40px; border: 1px solid var(--dota-gold); overflow: hidden; }
+
+        /* --- Layout --- */
+        .navbar {
+            height: 70px; background: rgba(0,0,0,0.8); border-bottom: 1px solid var(--dota-border);
+            display: flex; justify-content: space-between; align-items: center; padding: 0 30px;
+        }
+        .profile-trigger { display: flex; align-items: center; gap: 15px; cursor: pointer; }
+        .avatar-frame { width: 45px; height: 45px; border: 1px solid var(--dota-gold); position: relative; background: #111; }
         .avatar-frame img { width: 100%; height: 100%; object-fit: cover; }
+
+        .main-container { padding: 30px; display: grid; grid-template-columns: 320px 1fr; gap: 30px; height: calc(100vh - 100px); }
+        .friends-panel { background: rgba(20,24,28,0.8); border: 1px solid var(--dota-border); padding: 20px; overflow-y: auto; }
+        
+        .friend-item {
+            display: flex; align-items: center; gap: 12px; padding: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;
+        }
+        .friend-item:hover { background: rgba(255,255,255,0.05); }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; position: absolute; bottom: -2px; right: -2px; border: 2px solid var(--dota-panel); }
+
+        /* --- Notification --- */
+        .badge { background: var(--dota-red); color: white; border-radius: 50%; padding: 2px 7px; font-size: 11px; margin-left: 5px; }
+
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 500; }
     </style>
 </head>
 <body>
 
-    <!-- ЭКРАН ВХОДА -->
-    <div id="auth-screen">
+    <!-- ВХОД / РЕГИСТРАЦИЯ -->
+    <div id="auth-screen" class="auth-overlay">
         <div class="dota-card">
-            <h2 id="auth-title" style="font-family: 'Cinzel'; color: var(--dota-gold);">Вход</h2>
-            <input type="text" id="login" placeholder="Логин">
-            <input type="password" id="pass" placeholder="Пароль">
+            <h2 id="auth-title" class="dota-font" style="color:var(--dota-gold); text-align: center;">DOTA NETWORK</h2>
+            <input type="text" id="auth-login" placeholder="Логин">
+            <input type="password" id="auth-password" placeholder="Пароль">
             <div id="reg-box" class="hidden">
-                <input type="password" id="pass_confirm" placeholder="Повторите пароль">
+                <input type="password" id="auth-confirm" placeholder="Повторите пароль">
             </div>
-            <button class="btn-dota" id="main-btn" onclick="handleAuth()">Войти</button>
-            <p id="toggle-link" style="font-size: 11px; cursor: pointer; color: var(--dota-gold);" onclick="toggleMode()">НЕТ АККАУНТА? СОЗДАТЬ</p>
+            <button class="btn-dota" onclick="handleAuth()" id="auth-btn">Войти</button>
+            <p onclick="toggleReg()" id="toggle-text" style="font-size: 11px; margin-top: 15px; cursor:pointer; color: var(--dota-gold); text-align: center;">НЕТ АККАУНТА? СОЗДАТЬ</p>
         </div>
     </div>
 
     <!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
     <div id="app" class="hidden">
         <nav class="navbar">
-            <div style="display: flex; align-items: center; gap: 15px;">
-                <div class="avatar-frame"><img id="user-avatar" src=""></div>
+            <div class="profile-trigger" onclick="openProfile(currentUser.id, true)">
+                <div class="avatar-frame"><img src="" id="nav-avatar"></div>
                 <div>
-                    <div id="user-login" style="font-family: 'Cinzel'; color: var(--dota-gold);">NAME</div>
-                    <div id="user-id" style="font-size: 10px; color: #888;">ID: 000000</div>
+                    <div id="nav-login" class="dota-font" style="color: var(--dota-gold);">LOGIN</div>
+                    <div id="nav-id" style="font-size: 10px; color: #888;">ID: 000000</div>
                 </div>
             </div>
-            <button class="btn-dota" style="width: auto; padding: 5px 20px;" onclick="logout()">Выйти</button>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="showNotifications()" class="btn-dota" style="width: auto; padding: 5px 15px;">
+                    <i class="fas fa-bell"></i><span id="notif-count" class="badge">0</span>
+                </button>
+                <button onclick="logout()" class="btn-dota" style="width: auto; padding: 5px 15px; background: #333;">ВЫХОД</button>
+            </div>
         </nav>
-        <div style="text-align: center;">
-            <h1 style="font-family: 'Cinzel'; font-size: 40px; opacity: 0.5;">СЕТЬ ПОДКЛЮЧЕНА</h1>
-            <p>Вы вошли как <span id="display-name"></span></p>
+
+        <div class="main-container">
+            <div class="friends-panel">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <span class="dota-font">ДРУЗЬЯ</span>
+                    <i class="fas fa-user-plus" style="cursor:pointer; color: var(--dota-gold);" onclick="showAddFriend()"></i>
+                </div>
+                <div id="friends-list"></div>
+            </div>
+            <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; opacity: 0.2;">
+                <img src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/logos/dota_footer_logo.png" style="width: 200px;">
+                <h1 class="dota-font">СЕТЬ ПОДКЛЮЧЕНА</h1>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛКА ПРОФИЛЯ -->
+    <div id="profile-modal" class="modal hidden">
+        <div class="dota-card" style="width: 400px; text-align: center;">
+            <div class="avatar-frame" style="width: 90px; height: 90px; margin: 0 auto; cursor: pointer;" onclick="showAvatarGrid()" id="prof-avatar-btn">
+                <img src="" id="prof-avatar">
+            </div>
+            <h2 id="prof-login" class="dota-font" style="margin: 15px 0 5px;"></h2>
+            <p id="prof-id-val" style="color: var(--dota-red); font-size: 12px; margin-bottom: 15px;"></p>
+            <textarea id="prof-desc" placeholder="Расскажите о себе..."></textarea>
+            <button class="btn-dota" id="save-prof-btn" onclick="saveDescription()">Сохранить</button>
+            <button class="btn-dota" style="margin-top: 5px; background: #222;" onclick="closeModals()">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- МОДАЛКА УВЕДОМЛЕНИЙ -->
+    <div id="notif-modal" class="modal hidden">
+        <div class="dota-card">
+            <h3 class="dota-font">Заявки в друзья</h3>
+            <div id="notif-list" style="margin: 15px 0;"></div>
+            <button class="btn-dota" onclick="closeModals()">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- МОДАЛКА ВЫБОРА АВАТАРА -->
+    <div id="avatar-modal" class="modal hidden">
+        <div class="dota-card" style="width: 380px;">
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;" id="avatar-grid"></div>
         </div>
     </div>
 
     <script>
-        // ДАННЫЕ SUPABASE (ВСТАВЬ СВОИ)
+        // ДАННЫЕ SUPABASE
         const SB_URL = "https://zivcqnkymulfttkmutvl.supabase.co";
         const SB_KEY = "sb_publishable_Kj9WyV_jURDeGNQLAY_r7A_sWAkOOhk";
         const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
-        let isRegistration = false;
+        let currentUser = null;
+        let isReg = false;
 
-        function toggleMode() {
-            isRegistration = !isRegistration;
-            document.getElementById('auth-title').innerText = isRegistration ? 'Регистрация' : 'Вход';
-            document.getElementById('main-btn').innerText = isRegistration ? 'Создать' : 'Войти';
-            document.getElementById('reg-box').classList.toggle('hidden', !isRegistration);
-            document.getElementById('toggle-link').innerText = isRegistration ? 'ЕСТЬ АККАУНТ? ВОЙТИ' : 'НЕТ АККАУНТА? СОЗДАТЬ';
+        const avatars = [
+            "https://avatars.mds.yandex.net/i?id=9daa48affce7cf03b7b75863f56075a279504a68-10254792-images-thumbs&n=13",
+            "https://avatars.mds.yandex.net/i?id=4547ad8f66ef0b74068cf20b36579ec68e549808-5233353-images-thumbs&n=13",
+            "https://avatars.mds.yandex.net/i?id=61ca3bb2205e6b9a2be4b5ba8317283694230784-5876357-images-thumbs&n=13",
+            "https://avatars.mds.yandex.net/i?id=1fcf6c51429e992789f4f18d1aab178f32fa4dbd-5235819-images-thumbs&n=13",
+            "https://avatars.mds.yandex.net/i?id=a4809f5288505f436720f0aecfdbedce6b698fd6-5904614-images-thumbs&n=13"
+        ];
+
+        function toggleReg() {
+            isReg = !isReg;
+            document.getElementById('auth-title').innerText = isReg ? 'РЕГИСТРАЦИЯ' : 'DOTA NETWORK';
+            document.getElementById('auth-btn').innerText = isReg ? 'Создать аккаунт' : 'Войти';
+            document.getElementById('reg-box').classList.toggle('hidden', !isReg);
+            document.getElementById('toggle-text').innerText = isReg ? 'УЖЕ ЕСТЬ АККАУНТ? ВОЙТИ' : 'НЕТ АККАУНТА? СОЗДАТЬ';
         }
 
         async function handleAuth() {
-            const login = document.getElementById('login').value.trim();
-            const pass = document.getElementById('pass').value;
-            const confirm = document.getElementById('pass_confirm').value;
+            const login = document.getElementById('auth-login').value.trim();
+            const pass = document.getElementById('auth-password').value;
+            const email = `${login}@dota.local`;
 
-            if (!login || !pass) return alert("Заполните поля!");
-
-            // Используем виртуальную почту для Supabase Auth
-            const email = `${login}@dota.app`;
-
-            if (isRegistration) {
+            if (isReg) {
+                const confirm = document.getElementById('auth-confirm').value;
                 if (pass !== confirm) return alert("Пароли не совпадают!");
                 
-                // 1. Регистрация в Auth
                 const { data, error } = await supabase.auth.signUp({ email, password: pass });
+                if (error) return alert(error.message);
                 
-                if (error) {
-                    alert("Ошибка регистрации: " + error.message);
-                    return;
-                }
-
-                // 2. Создание записи в таблице profiles
                 const displayId = Math.floor(100000 + Math.random() * 899999);
-                const { error: profileError } = await supabase.from('profiles').insert([
-                    { 
-                        id: data.user.id, 
-                        login: login, 
-                        display_id: displayId,
-                        avatar_url: "https://avatars.mds.yandex.net/i?id=9daa48affce7cf03b7b75863f56075a279504a68-10254792-images-thumbs&n=13"
-                    }
-                ]);
-
-                if (profileError) {
-                    console.error("Profile error:", profileError);
-                    alert("Аккаунт создан, но профиль не заполнился.");
-                } else {
-                    alert("Аккаунт успешно создан! Теперь войдите.");
-                    toggleMode();
-                }
-
+                await supabase.from('profiles').insert([{ id: data.user.id, login, display_id: displayId, avatar_url: avatars[0] }]);
+                alert("Аккаунт создан! Теперь войдите.");
+                toggleReg();
             } else {
-                // ВХОД
-                const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
-                
-                if (error) {
-                    alert("Ошибка входа: " + error.message);
-                } else {
-                    checkUser();
-                }
+                const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+                if (error) return alert("Ошибка входа. Проверьте логин/пароль или настройку 'Confirm Email' в Supabase.");
+                initApp();
             }
         }
 
-        async function checkUser() {
+        async function initApp() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-                if (profile) {
-                    showApp(profile);
-                }
+                currentUser = profile;
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('app').classList.remove('hidden');
+                updateUI();
+                refreshData();
+                setupRealtime();
+                setInterval(updateHeartbeat, 30000);
             }
         }
 
-        function showApp(profile) {
-            document.getElementById('auth-screen').classList.add('hidden');
-            document.getElementById('app').classList.remove('hidden');
-            document.getElementById('user-login').innerText = profile.login.toUpperCase();
-            document.getElementById('display-name').innerText = profile.login;
-            document.getElementById('user-id').innerText = "ID: " + profile.display_id;
-            document.getElementById('user-avatar').src = profile.avatar_url;
+        function updateUI() {
+            document.getElementById('nav-avatar').src = currentUser.avatar_url;
+            document.getElementById('nav-login').innerText = currentUser.login.toUpperCase();
+            document.getElementById('nav-id').innerText = "ID: " + currentUser.display_id;
         }
 
-        async function logout() {
-            await supabase.auth.signOut();
-            location.reload();
+        async function refreshData() {
+            // Друзья
+            const { data: f1 } = await supabase.from('friendships').select('receiver_id, profiles!friendships_receiver_id_fkey(*)').eq('sender_id', currentUser.id).eq('status', 'accepted');
+            const { data: f2 } = await supabase.from('friendships').select('sender_id, profiles!friendships_sender_id_fkey(*)').eq('receiver_id', currentUser.id).eq('status', 'accepted');
+            
+            const list = document.getElementById('friends-list');
+            list.innerHTML = '';
+            const all = [...(f1?.map(x=>x.profiles) || []), ...(f2?.map(x=>x.profiles) || [])];
+            
+            all.forEach(p => {
+                const isOnline = (new Date() - new Date(p.last_seen)) < 60000;
+                list.innerHTML += `
+                    <div class="friend-item" onclick="openProfile('${p.id}', false)">
+                        <div class="avatar-frame" style="width:35px; height:35px; border-color:${isOnline ? 'var(--online)' : '#555'}">
+                            <img src="${p.avatar_url}">
+                            <div class="status-dot" style="background:${isOnline ? 'var(--online)' : '#555'}"></div>
+                        </div>
+                        <span style="color:${isOnline ? '#fff' : '#888'}">${p.login}</span>
+                    </div>`;
+            });
+
+            // Заявки
+            const { data: reqs } = await supabase.from('friendships').select('id, profiles!friendships_sender_id_fkey(*)').eq('receiver_id', currentUser.id).eq('status', 'pending');
+            document.getElementById('notif-count').innerText = reqs?.length || 0;
+            window.pendingRequests = reqs || [];
         }
 
-        // Проверяем сессию при загрузке страницы
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) checkUser();
-        });
+        function setupRealtime() {
+            supabase.channel('db-changes').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshData()).subscribe();
+        }
+
+        async function updateHeartbeat() {
+            await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', currentUser.id);
+        }
+
+        async function showAddFriend() {
+            const id = prompt("Введите ID игрока:");
+            if (!id) return;
+            const { data: target } = await supabase.from('profiles').select('id').eq('display_id', id).single();
+            if (target) {
+                await supabase.from('friendships').insert([{ sender_id: currentUser.id, receiver_id: target.id }]);
+                alert("Заявка отправлена!");
+            } else alert("Игрок не найден");
+        }
+
+        function showNotifications() {
+            const list = document.getElementById('notif-list');
+            list.innerHTML = window.pendingRequests.length ? '' : 'Нет новых заявок';
+            window.pendingRequests.forEach(r => {
+                list.innerHTML += `<div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <span>${r.profiles.login}</span>
+                    <button onclick="acceptFriend('${r.id}')" class="btn-dota" style="width:auto; padding:2px 10px;">Принять</button>
+                </div>`;
+            });
+            document.getElementById('notif-modal').classList.remove('hidden');
+        }
+
+        async function acceptFriend(id) {
+            await supabase.from('friendships').update({ status: 'accepted' }).eq('id', id);
+            closeModals();
+        }
+
+        async function openProfile(id, isMy) {
+            const { data: p } = await supabase.from('profiles').select('*').eq('id', id).single();
+            document.getElementById('prof-avatar').src = p.avatar_url;
+            document.getElementById('prof-login').innerText = p.login;
+            document.getElementById('prof-id-val').innerText = "ID: " + p.display_id;
+            document.getElementById('prof-desc').value = p.description || "";
+            document.getElementById('prof-desc').disabled = !isMy;
+            document.getElementById('save-prof-btn').classList.toggle('hidden', !isMy);
+            document.getElementById('profile-modal').classList.remove('hidden');
+        }
+
+        function showAvatarGrid() {
+            if (document.getElementById('save-prof-btn').classList.contains('hidden')) return;
+            const grid = document.getElementById('avatar-grid');
+            grid.innerHTML = '';
+            avatars.forEach(url => {
+                const img = document.createElement('img');
+                img.src = url; img.style.width="100%"; img.style.cursor="pointer";
+                img.onclick = async () => {
+                    await supabase.from('profiles').update({ avatar_url: url }).eq('id', currentUser.id);
+                    currentUser.avatar_url = url; updateUI();
+                    document.getElementById('prof-avatar').src = url;
+                    document.getElementById('avatar-modal').classList.add('hidden');
+                };
+                grid.appendChild(img);
+            });
+            document.getElementById('avatar-modal').classList.remove('hidden');
+        }
+
+        async function saveDescription() {
+            const desc = document.getElementById('prof-desc').value;
+            await supabase.from('profiles').update({ description: desc }).eq('id', currentUser.id);
+            alert("Сохранено!");
+        }
+
+        function closeModals() { document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden')); }
+        function logout() { supabase.auth.signOut().then(() => location.reload()); }
+
+        supabase.auth.getSession().then(({ data: { session } }) => { if (session) initApp(); });
     </script>
 </body>
 </html>
